@@ -5,18 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Venue Monitor</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { background-color: #f8f9fa; padding-top: 30px; }
+        body { background-color: #f8f9fa; padding-top: 30px; padding-bottom: 50px;}
         .dashboard-card { border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px;}
         .status-indicator { font-size: 1.5rem; font-weight: bold; }
         .sensor-val { font-size: 2rem; font-weight: bold; color: #495057; }
+        .table-card { background: white; border-radius: 15px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px;}
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="row justify-content-center">
-        <div class="col-md-10">
+        <div class="col-md-11">
             <h2 class="text-center mb-4">🎳 Venue Environmental Dashboard</h2>
             
             <div class="card dashboard-card p-4 text-center" id="alert-card">
@@ -27,7 +29,7 @@
                 <small class="text-muted">Last Sync: <span id="alert-time">--:--:--</span></small>
             </div>
 
-            <div class="row text-center">
+            <div class="row text-center mb-4">
                 <div class="col-md-3">
                     <div class="card dashboard-card p-3">
                         <div class="text-muted">Occupancy</div>
@@ -57,46 +59,156 @@
                     </div>
                 </div>
             </div>
+
+            <div class="card table-card p-4">
+                <h5 class="text-muted mb-3">Live Telemetry Trends (Last 25 Readings)</h5>
+                <canvas id="telemetryChart" height="80"></canvas>
+            </div>
+
+            <div class="table-card p-4">
+                <h5 class="text-muted mb-3">Telemetry Log</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle table-sm">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Time</th>
+                                <th>Status</th>
+                                <th>Occupancy</th>
+                                <th>CO2 (ppm)</th>
+                                <th>Temp (°C)</th>
+                                <th>HVAC (%)</th>
+                                <th>Action Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="telemetry-table-body">
+                            <tr><td colspan="7" class="text-center">Loading telemetry data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
             
         </div>
     </div>
 </div>
 
 <script>
+    let telemetryChart = null; // Global variable to hold our chart
+
+    function initOrUpdateChart(historyData) {
+        // Reverse the array so the graph plots left-to-right (oldest to newest)
+        const chartData = [...historyData].reverse(); 
+
+        const labels = chartData.map(d => d.time);
+        const occData = chartData.map(d => d.occupancy);
+        const co2Data = chartData.map(d => d.co2);
+        const tempData = chartData.map(d => d.temperature);
+        const hvacData = chartData.map(d => d.hvac);
+
+        if (telemetryChart) {
+            // Update existing chart smoothly
+            telemetryChart.data.labels = labels;
+            telemetryChart.data.datasets[0].data = occData;
+            telemetryChart.data.datasets[1].data = co2Data;
+            telemetryChart.data.datasets[2].data = tempData;
+            telemetryChart.data.datasets[3].data = hvacData;
+            telemetryChart.update('none'); // 'none' prevents the jumpy load animation on every tick
+        } else {
+            // Create the chart for the first time
+            const ctx = document.getElementById('telemetryChart').getContext('2d');
+            telemetryChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Occupancy', data: occData, borderColor: '#0d6efd', tension: 0.3, yAxisID: 'y' },
+                        { label: 'Temperature (°C)', data: tempData, borderColor: '#dc3545', tension: 0.3, yAxisID: 'y' },
+                        { label: 'HVAC (%)', data: hvacData, borderColor: '#198754', tension: 0.3, yAxisID: 'y' },
+                        { label: 'CO2 (ppm)', data: co2Data, borderColor: '#6c757d', tension: 0.3, yAxisID: 'y1', borderDash: [5, 5] }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        y: { 
+                            type: 'linear', display: true, position: 'left',
+                            title: { display: true, text: 'Occ / Temp / HVAC' }
+                        },
+                        y1: { 
+                            type: 'linear', display: true, position: 'right',
+                            title: { display: true, text: 'CO2 (ppm)' },
+                            grid: { drawOnChartArea: false } // Prevents gridline clashing
+                        }
+                    }
+                }
+            });
+        }
+    }
+
     function fetchLatestAlert() {
         fetch('/api/latest-alert/')
             .then(response => response.json())
             .then(data => {
-                // Update Alert Info
-                document.getElementById('alert-status').innerText = data.status;
-                document.getElementById('alert-details').innerText = data.details;
-                document.getElementById('alert-time').innerText = data.time;
+                if (data.history && data.history.length > 0) {
+                    const latest = data.history[0]; 
 
-                // Update Sensor Numbers
-                document.getElementById('val-occ').innerText = data.occupancy;
-                document.getElementById('val-co2').innerText = data.co2;
-                document.getElementById('val-temp').innerText = data.temperature;
-                document.getElementById('val-hvac').innerText = data.hvac;
+                    // 1. Update Top Alert Card
+                    document.getElementById('alert-status').innerText = latest.status;
+                    document.getElementById('alert-details').innerText = latest.details;
+                    document.getElementById('alert-time').innerText = latest.time;
 
-                // Dynamic Colors for the Alert Card
-                const card = document.getElementById('alert-card');
-                const statusText = document.getElementById('alert-status');
-                
-                if (data.status === 'CRITICAL_MAINTENANCE') {
-                    card.style.borderTop = "8px solid #dc3545"; statusText.style.color = "#dc3545";
-                } else if (data.status === 'HVAC_ACTION') {
-                    card.style.borderTop = "8px solid #ffc107"; statusText.style.color = "#ffc107";
-                } else if (data.status === 'ROUTINE_ACTION') {
-                    card.style.borderTop = "8px solid #17a2b8"; statusText.style.color = "#17a2b8";
-                } else {
-                    card.style.borderTop = "8px solid #28a745"; statusText.style.color = "#28a745";
+                    // 2. Update 4-Grid Sensor Numbers
+                    document.getElementById('val-occ').innerText = latest.occupancy;
+                    document.getElementById('val-co2').innerText = latest.co2;
+                    document.getElementById('val-temp').innerText = latest.temperature;
+                    document.getElementById('val-hvac').innerText = latest.hvac;
+
+                    // 3. Dynamic Colors
+                    const card = document.getElementById('alert-card');
+                    const statusText = document.getElementById('alert-status');
+                    
+                    if (latest.status === 'CRITICAL_MAINTENANCE') {
+                        card.style.borderTop = "8px solid #dc3545"; statusText.style.color = "#dc3545";
+                    } else if (latest.status === 'HVAC_ACTION') {
+                        card.style.borderTop = "8px solid #ffc107"; statusText.style.color = "#ffc107";
+                    } else if (latest.status === 'ROUTINE_ACTION') {
+                        card.style.borderTop = "8px solid #17a2b8"; statusText.style.color = "#17a2b8";
+                    } else {
+                        card.style.borderTop = "8px solid #28a745"; statusText.style.color = "#28a745";
+                    }
+
+                    // 4. Update the Chart
+                    initOrUpdateChart(data.history);
+
+                    // 5. Build the History Table
+                    const tbody = document.getElementById('telemetry-table-body');
+                    tbody.innerHTML = ''; 
+                    
+                    data.history.forEach(row => {
+                        let badgeClass = 'bg-success';
+                        if (row.status === 'CRITICAL_MAINTENANCE') badgeClass = 'bg-danger';
+                        if (row.status === 'HVAC_ACTION') badgeClass = 'bg-warning text-dark';
+                        if (row.status === 'ROUTINE_ACTION') badgeClass = 'bg-info text-dark';
+
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><strong>${row.time}</strong></td>
+                            <td><span class="badge ${badgeClass}">${row.status}</span></td>
+                            <td>${row.occupancy}</td>
+                            <td>${row.co2}</td>
+                            <td>${row.temperature}</td>
+                            <td>${row.hvac}</td>
+                            <td><small class="text-muted">${row.details}</small></td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
                 }
             })
             .catch(error => console.error('Error fetching data:', error));
     }
 
     fetchLatestAlert();
-    setInterval(fetchLatestAlert, 2000); // Ping every 2 seconds
+    setInterval(fetchLatestAlert, 2000); 
 </script>
 
 </body>
