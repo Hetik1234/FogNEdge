@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Venue Monitor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; padding-top: 30px; }
+        .dashboard-card { border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px;}
+        .status-indicator { font-size: 1.5rem; font-weight: bold; }
+        .sensor-val { font-size: 2rem; font-weight: bold; color: #495057; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <h2 class="text-center mb-4">🎳 Venue Environmental Dashboard</h2>
+            
+            <div class="card dashboard-card p-4 text-center" id="alert-card">
+                <h5 class="text-muted">Edge Computing System Status</h5>
+                <hr>
+                <div class="status-indicator my-2" id="alert-status">Loading...</div>
+                <p class="lead" id="alert-details">Connecting to AWS IoT Core...</p>
+                <small class="text-muted">Last Sync: <span id="alert-time">--:--:--</span></small>
+            </div>
+
+            <div class="row text-center">
+                <div class="col-md-3">
+                    <div class="card dashboard-card p-3">
+                        <div class="text-muted">Occupancy</div>
+                        <div class="sensor-val" id="val-occ">--</div>
+                        <small>People</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card dashboard-card p-3">
+                        <div class="text-muted">Air Quality (CO2)</div>
+                        <div class="sensor-val" id="val-co2">--</div>
+                        <small>ppm</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card dashboard-card p-3">
+                        <div class="text-muted">Temperature</div>
+                        <div class="sensor-val" id="val-temp">--</div>
+                        <small>°C</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card dashboard-card p-3">
+                        <div class="text-muted">HVAC Airflow</div>
+                        <div class="sensor-val" id="val-hvac">--</div>
+                        <small>Capacity %</small>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+</div>
+
+<script>
+    function fetchLatestAlert() {
+        fetch('/api/latest-alert/')
+            .then(response => response.json())
+            .then(data => {
+                // Update Alert Info
+                document.getElementById('alert-status').innerText = data.status;
+                document.getElementById('alert-details').innerText = data.details;
+                document.getElementById('alert-time').innerText = data.time;
+
+                // Update Sensor Numbers
+                document.getElementById('val-occ').innerText = data.occupancy;
+                document.getElementById('val-co2').innerText = data.co2;
+                document.getElementById('val-temp').innerText = data.temperature;
+                document.getElementById('val-hvac').innerText = data.hvac;
+
+                // Dynamic Colors for the Alert Card
+                const card = document.getElementById('alert-card');
+                const statusText = document.getElementById('alert-status');
+                
+                if (data.status === 'CRITICAL_MAINTENANCE') {
+                    card.style.borderTop = "8px solid #dc3545"; statusText.style.color = "#dc3545";
+                } else if (data.status === 'HVAC_ACTION') {
+                    card.style.borderTop = "8px solid #ffc107"; statusText.style.color = "#ffc107";
+                } else if (data.status === 'ROUTINE_ACTION') {
+                    card.style.borderTop = "8px solid #17a2b8"; statusText.style.color = "#17a2b8";
+                } else {
+                    card.style.borderTop = "8px solid #28a745"; statusText.style.color = "#28a745";
+                }
+            })
+            .catch(error => console.error('Error fetching data:', error));
+    }
+
+    fetchLatestAlert();
+    setInterval(fetchLatestAlert, 2000); // Ping every 2 seconds
+</script>
+
+</body>
+</html>

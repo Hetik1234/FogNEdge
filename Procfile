@@ -1,0 +1,1 @@
+web: gunicorn venue_project.wsgi:application
