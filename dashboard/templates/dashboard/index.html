@@ -62,7 +62,9 @@
 
             <div class="card table-card p-4">
                 <h5 class="text-muted mb-3">Live Telemetry Trends (Last 25 Readings)</h5>
-                <canvas id="telemetryChart" height="80"></canvas>
+                <div style="position: relative; height: 350px; width: 100%;">
+                    <canvas id="telemetryChart"></canvas>
+                </div>
             </div>
 
             <div class="table-card p-4">
@@ -128,6 +130,7 @@
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false, // FIX 2: Added this line to let the chart fill the 350px div
                     interaction: { mode: 'index', intersect: false },
                     scales: {
                         y: { 
