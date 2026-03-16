@@ -94,7 +94,7 @@
 </div>
 
 <script>
-    let telemetryChart = null; // Global variable to hold our chart
+    let telemetryChart = null; 
 
     function initOrUpdateChart(historyData) {
         // Reverse the array so the graph plots left-to-right (oldest to newest)
@@ -107,13 +107,13 @@
         const hvacData = chartData.map(d => d.hvac);
 
         if (telemetryChart) {
-            // Update existing chart smoothly
+            // Update existing chart smoothly with correct data mapping
             telemetryChart.data.labels = labels;
-            telemetryChart.data.datasets[0].data = occData;
-            telemetryChart.data.datasets[1].data = co2Data;
-            telemetryChart.data.datasets[2].data = tempData;
-            telemetryChart.data.datasets[3].data = hvacData;
-            telemetryChart.update('none'); // 'none' prevents the jumpy load animation on every tick
+            telemetryChart.data.datasets[0].data = occData;     // Occupancy (Blue)
+            telemetryChart.data.datasets[1].data = tempData;    // Temperature (Red)
+            telemetryChart.data.datasets[2].data = co2Data;     // CO2 (Grey Dotted)
+            telemetryChart.data.datasets[3].data = hvacData;    // HVAC (Green)
+            telemetryChart.update('none'); 
         } else {
             // Create the chart for the first time
             const ctx = document.getElementById('telemetryChart').getContext('2d');
@@ -124,13 +124,13 @@
                     datasets: [
                         { label: 'Occupancy', data: occData, borderColor: '#0d6efd', tension: 0.3, yAxisID: 'y' },
                         { label: 'Temperature (°C)', data: tempData, borderColor: '#dc3545', tension: 0.3, yAxisID: 'y' },
-                        { label: 'HVAC (%)', data: hvacData, borderColor: '#198754', tension: 0.3, yAxisID: 'y' },
-                        { label: 'CO2 (ppm)', data: co2Data, borderColor: '#6c757d', tension: 0.3, yAxisID: 'y1', borderDash: [5, 5] }
+                        { label: 'CO2 (ppm)', data: co2Data, borderColor: '#6c757d', tension: 0.3, yAxisID: 'y1', borderDash: [5, 5] },
+                        { label: 'HVAC (%)', data: hvacData, borderColor: '#198754', tension: 0.3, yAxisID: 'y' }
                     ]
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false, // FIX 2: Added this line to let the chart fill the 350px div
+                    maintainAspectRatio: false, 
                     interaction: { mode: 'index', intersect: false },
                     scales: {
                         y: { 
@@ -140,7 +140,7 @@
                         y1: { 
                             type: 'linear', display: true, position: 'right',
                             title: { display: true, text: 'CO2 (ppm)' },
-                            grid: { drawOnChartArea: false } // Prevents gridline clashing
+                            grid: { drawOnChartArea: false } 
                         }
                     }
                 }
@@ -210,6 +210,7 @@
             .catch(error => console.error('Error fetching data:', error));
     }
 
+    // Ping Django every 2 seconds
     fetchLatestAlert();
     setInterval(fetchLatestAlert, 2000); 
 </script>
