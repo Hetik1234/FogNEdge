@@ -3,7 +3,7 @@ import boto3
 import uuid
 
 # Connect to DynamoDB
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 table = dynamodb.Table('VenueTelemetry')
 
 def lambda_handler(event, context):
