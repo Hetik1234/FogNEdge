@@ -25,9 +25,18 @@ def get_latest_alert(request):
                 raw_time = item.get('timestamp', '')
                 formatted_time = raw_time[11:19] if len(raw_time) > 18 else raw_time
                 
+                # Grab the status to generate dynamic details
+                venue_status = item.get('venue_status', 'SYSTEM_NORMAL')
+                
+                # Dynamically generate the action details
+                if venue_status == "CAUTION: VENTILATION REQUIRED":
+                    action_details = "Threshold exceeded: High CO2 and Occupancy detected. Immediate HVAC adjustment recommended."
+                else:
+                    action_details = "All environmental metrics are within normal operating parameters."
+                
                 history_list.append({
-                    # Mapped exactly to the Lambda DynamoDB payload
-                    'status': item.get('venue_status', 'SYSTEM_NORMAL'),
+                    'status': venue_status,
+                    'details': action_details, # Added this back for your frontend!
                     'time': formatted_time,
                     'occupancy': int(item.get('occupancy', 0)),
                     'co2': int(item.get('co2', 0)),
@@ -39,6 +48,10 @@ def get_latest_alert(request):
         else:
             return JsonResponse({'history': []})
             
+    except Exception as e:
+        print(f"DynamoDB Error: {e}")
+        return JsonResponse({'history': []}, status=500)
+                    
     except Exception as e:
         print(f"DynamoDB Error: {e}")
         return JsonResponse({'history': []}, status=500)
