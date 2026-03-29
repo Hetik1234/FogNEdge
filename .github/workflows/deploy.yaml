@@ -30,8 +30,10 @@ jobs:
       - name: EB deploy
         uses: einaregilsson/beanstalk-deploy@v22
         with:
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           application_name: FogNEdge
           environment_name: FogNEdge-env
           version_label: v-${{ github.run_number }}
-          region: us-east-1
+          region: eu-west-1
           deployment_package: application.zip
