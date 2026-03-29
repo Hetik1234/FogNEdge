@@ -107,15 +107,13 @@
         const hvacData = chartData.map(d => d.hvac);
 
         if (telemetryChart) {
-            // Update existing chart smoothly with correct data mapping
             telemetryChart.data.labels = labels;
-            telemetryChart.data.datasets[0].data = occData;     // Occupancy (Blue)
-            telemetryChart.data.datasets[1].data = tempData;    // Temperature (Red)
-            telemetryChart.data.datasets[2].data = co2Data;     // CO2 (Grey Dotted)
-            telemetryChart.data.datasets[3].data = hvacData;    // HVAC (Green)
+            telemetryChart.data.datasets[0].data = occData;    
+            telemetryChart.data.datasets[1].data = tempData;   
+            telemetryChart.data.datasets[2].data = co2Data;    
+            telemetryChart.data.datasets[3].data = hvacData;   
             telemetryChart.update('none'); 
         } else {
-            // Create the chart for the first time
             const ctx = document.getElementById('telemetryChart').getContext('2d');
             telemetryChart = new Chart(ctx, {
                 type: 'line',
@@ -166,18 +164,19 @@
                     document.getElementById('val-temp').innerText = latest.temperature;
                     document.getElementById('val-hvac').innerText = latest.hvac;
 
-                    // 3. Dynamic Colors
+                    // 3. Dynamic Colors for Top Card (Reading from Python's logic)
                     const card = document.getElementById('alert-card');
                     const statusText = document.getElementById('alert-status');
                     
-                    if (latest.status === 'CRITICAL_MAINTENANCE') {
-                        card.style.borderTop = "8px solid #dc3545"; statusText.style.color = "#dc3545";
-                    } else if (latest.status === 'HVAC_ACTION') {
-                        card.style.borderTop = "8px solid #ffc107"; statusText.style.color = "#ffc107";
-                    } else if (latest.status === 'ROUTINE_ACTION') {
-                        card.style.borderTop = "8px solid #17a2b8"; statusText.style.color = "#17a2b8";
+                    if (latest.color.includes('danger')) {
+                        card.style.borderTop = "8px solid #dc3545"; // Red
+                        statusText.style.color = "#dc3545";
+                    } else if (latest.color.includes('warning')) {
+                        card.style.borderTop = "8px solid #ffc107"; // Yellow
+                        statusText.style.color = "#ffc107"; 
                     } else {
-                        card.style.borderTop = "8px solid #28a745"; statusText.style.color = "#28a745";
+                        card.style.borderTop = "8px solid #28a745"; // Green
+                        statusText.style.color = "#28a745";
                     }
 
                     // 4. Update the Chart
@@ -188,15 +187,11 @@
                     tbody.innerHTML = ''; 
                     
                     data.history.forEach(row => {
-                        let badgeClass = 'bg-success';
-                        if (row.status === 'CRITICAL_MAINTENANCE') badgeClass = 'bg-danger';
-                        if (row.status === 'HVAC_ACTION') badgeClass = 'bg-warning text-dark';
-                        if (row.status === 'ROUTINE_ACTION') badgeClass = 'bg-info text-dark';
-
                         const tr = document.createElement('tr');
+                        // Notice how we just inject row.color right here:
                         tr.innerHTML = `
                             <td><strong>${row.time}</strong></td>
-                            <td><span class="badge ${badgeClass}">${row.status}</span></td>
+                            <td><span class="badge bg-${row.color}">${row.status}</span></td>
                             <td>${row.occupancy}</td>
                             <td>${row.co2}</td>
                             <td>${row.temperature}</td>
