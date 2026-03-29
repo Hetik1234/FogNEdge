@@ -1,134 +1,79 @@
-from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
-import time
-import random
+from flask import Flask, request, jsonify
 import threading
+import time
+import datetime
 import json
-from queue import Queue
-from datetime import datetime
+from awscrt import mqtt
+from awsiot import mqtt_connection_builder
 
-# ---------------------------------------------------------
-# 1. SENSOR LAYER
-# ---------------------------------------------------------
-class MockSensor(threading.Thread):
-    def __init__(self, sensor_id, sensor_type, frequency_seconds, data_queue):
-        super().__init__()
-        self.sensor_id = sensor_id
-        self.sensor_type = sensor_type
-        self.frequency_seconds = frequency_seconds
-        self.data_queue = data_queue
-        self.daemon = True 
+# ==========================================
+# AWS IOT CORE CONFIGURATION - UPDATE THESE!
+# ==========================================
+ENDPOINT = "a2jhzm8175r7at-ats.iot.eu-west-1.amazonaws.com"
+CLIENT_ID = "SmartVenueFogNode"
+PATH_TO_CERT = r"C:\Users\hetik\Downloads\Fog&EdgeComputing\Project\FogNEdge\certs\7c525fdea28690d6266252c21292f268d2bc510967e34603b7127cd702661334-certificate.pem.crt"
+PATH_TO_KEY = r"C:\Users\hetik\Downloads\Fog&EdgeComputing\Project\FogNEdge\certs\7c525fdea28690d6266252c21292f268d2bc510967e34603b7127cd702661334-private.pem.key"
+PATH_TO_ROOT = r"C:\Users\hetik\Downloads\Fog&EdgeComputing\Project\FogNEdge\certs\AmazonRootCA1.pem"
+TOPIC = "venue/telemetry"
+# ==========================================
 
-    def generate_value(self):
-        if self.sensor_type == 'occupancy': return int(random.uniform(5, 45))
-        elif self.sensor_type == 'co2_level': return int(random.uniform(400, 1200))
-        elif self.sensor_type == 'temperature': return round(random.uniform(20.0, 27.0), 1)
-        elif self.sensor_type == 'hvac_airflow': return int(random.uniform(10, 95))
-        return 0
+app = Flask(__name__)
 
-    def run(self):
-        while True:
-            payload = {"sensor_id": self.sensor_id, "type": self.sensor_type, "value": self.generate_value()}
-            self.data_queue.put(payload)
-            time.sleep(self.frequency_seconds)
+venue_state = {
+    "co2": 0,
+    "occupancy": 0,
+    "temperature": 0.0,
+    "hvac": 0
+}
 
-# ---------------------------------------------------------
-# 2. VIRTUAL FOG NODE LAYER (AWS IoT Integrated)
-# ---------------------------------------------------------
-class VirtualFogNode:
-    def __init__(self, data_queue):
-        self.data_queue = data_queue
-        self.current_state = {'occupancy': 0, 'co2_level': 400, 'temperature': 22.0, 'hvac_airflow': 0}
-        self.hvac_struggling_counter = 0
+# Initialize AWS MQTT Connection
+print("Connecting to AWS IoT Core...")
+mqtt_connection = mqtt_connection_builder.mtls_from_path(
+    endpoint=ENDPOINT,
+    cert_filepath=PATH_TO_CERT,
+    pri_key_filepath=PATH_TO_KEY,
+    ca_filepath=PATH_TO_ROOT,
+    client_id=CLIENT_ID,
+    clean_session=False,
+    keep_alive_secs=30
+)
+connect_future = mqtt_connection.connect()
+connect_future.result()
+print("Connected securely to AWS IoT Core!")
 
-        # --- AWS IoT Core Setup ---
-        self.mqtt_client = AWSIoTMQTTClient("VenueFogNode")
+@app.route('/ingest', methods=['POST'])
+def ingest_data():
+    data = request.json
+    sensor_type = data.get("type")
+    value = data.get("value")
+    if sensor_type in venue_state:
+        venue_state[sensor_type] = value
+    return jsonify({"status": "received"}), 200
+
+def process_and_publish():
+    while True:
+        time.sleep(10) 
         
-        # TODO: Replace with your actual AWS IoT Custom Endpoint
-        self.mqtt_client.configureEndpoint("a1xzyu0yv7w92y-ats.iot.us-east-1.amazonaws.com", 8883)
+        status = "NORMAL"
+        if venue_state["co2"] > 1000 and venue_state["occupancy"] > 150:
+            status = "CAUTION: VENTILATION REQUIRED"
+            
+        payload = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "venue_status": status,
+            "telemetry": venue_state.copy()
+        }
         
-        # TODO: Ensure these match the exact filenames you uploaded to Cloud9
-        self.mqtt_client.configureCredentials(
-            "/home/ec2-user/environment/FogNEdge/certs/AmazonRootCA1.pem",
-            "/home/ec2-user/environment/FogNEdge/certs/aaba5b4204d011bd48d62d5449ccb46df4f0d67a57b318b4d6e83c8722408508-private.pem.key",
-            "/home/ec2-user/environment/FogNEdge/certs/aaba5b4204d011bd48d62d5449ccb46df4f0d67a57b318b4d6e83c8722408508-certificate.pem.crt"
+        print(f"\n[FOG NODE] Aggregated Data: {payload}")
+        
+        # Publish to AWS IoT Core
+        mqtt_connection.publish(
+            topic=TOPIC,
+            payload=json.dumps(payload),
+            qos=mqtt.QoS.AT_LEAST_ONCE
         )
+        print(f"[AWS] Successfully published to topic: {TOPIC}")
 
-        print("Connecting to AWS IoT Core...")
-        self.mqtt_client.connect()
-        print("Connected successfully!\n")
-
-    def process_incoming_data(self):
-        # Starts the decision engine in the background
-        threading.Thread(target=self.evaluate_interdependent_state, daemon=True).start()
-        
-        while True:
-            if not self.data_queue.empty():
-                raw_data = self.data_queue.get()
-                self.current_state[raw_data['type']] = raw_data['value']
-            time.sleep(0.1)
-
-    def evaluate_interdependent_state(self):
-        while True:
-            occ = self.current_state['occupancy']
-            co2 = self.current_state['co2_level']
-            temp = self.current_state['temperature']
-            airflow = self.current_state['hvac_airflow']
-
-            # Default state
-            status = "SYSTEM_NORMAL"
-            details = "All sensors nominal. Venue environment optimal."
-
-            # Evaluate interdependent thresholds
-            if occ > 20 and co2 > 1000 and temp < 24.0:
-                status = "ROUTINE_ACTION"
-                details = "Opened fresh air vents (High CO2, Normal Temp)."
-            elif occ > 20 and co2 > 1000 and temp >= 24.0:
-                status = "HVAC_ACTION"
-                details = "Engaged AC Compressor (High CO2, High Temp)."
-            
-            if temp >= 25.0 and airflow > 80:
-                self.hvac_struggling_counter += 1
-                if self.hvac_struggling_counter >= 3:
-                    status = "CRITICAL_MAINTENANCE"
-                    details = "AC at max capacity but temperature remains high!"
-            else:
-                self.hvac_struggling_counter = 0
-
-            # Package the entire state and dispatch it
-            payload = {
-                "status": status,
-                "details": details,
-                "occupancy": occ,
-                "co2": co2,
-                "temperature": temp,
-                "hvac": airflow,
-                "timestamp": datetime.utcnow().isoformat()
-            }
-            json_payload = json.dumps(payload)
-            
-            # Publish to AWS
-            self.mqtt_client.publish("venue/telemetry", json_payload, 1)
-            print(f"[*] PUBLISHED: {status} | Temp: {temp}°C | CO2: {co2}ppm | Occ: {occ}")
-            
-            time.sleep(5) # Send heartbeat every 5 seconds
-
-# ---------------------------------------------------------
-# 3. MAIN EXECUTION
-# ---------------------------------------------------------
 if __name__ == "__main__":
-    local_network_queue = Queue()
-
-    sensors = [
-        MockSensor("cam_zone_1", "occupancy", 2.0, local_network_queue),
-        MockSensor("air_qual_1", "co2_level", 3.0, local_network_queue),
-        MockSensor("therm_1", "temperature", 4.0, local_network_queue),
-        MockSensor("vent_monitor_1", "hvac_airflow", 2.0, local_network_queue)
-    ]
-
-    for sensor in sensors: sensor.start()
-
-    fog_node = VirtualFogNode(local_network_queue)
-    try:
-        fog_node.process_incoming_data()
-    except KeyboardInterrupt:
-        print("\nSimulation stopped.")
+    threading.Thread(target=process_and_publish, daemon=True).start()
+    app.run(port=5000, debug=False)

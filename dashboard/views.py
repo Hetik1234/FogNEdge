@@ -1,8 +1,10 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 import boto3
+from decimal import Decimal
 
-dynamodb = boto3.resource('dynamodb', region_name='us-east-1') 
+# Using the Ireland region from your configuration
+dynamodb = boto3.resource('dynamodb', region_name='eu-west-1') 
 table = dynamodb.Table('VenueTelemetry')
 
 def dashboard_view(request):
@@ -24,8 +26,8 @@ def get_latest_alert(request):
                 formatted_time = raw_time[11:19] if len(raw_time) > 18 else raw_time
                 
                 history_list.append({
-                    'status': item.get('status', 'SYSTEM_NORMAL'),
-                    'details': item.get('details', 'No details available.'),
+                    # Mapped exactly to the Lambda DynamoDB payload
+                    'status': item.get('venue_status', 'SYSTEM_NORMAL'),
                     'time': formatted_time,
                     'occupancy': int(item.get('occupancy', 0)),
                     'co2': int(item.get('co2', 0)),
@@ -39,4 +41,4 @@ def get_latest_alert(request):
             
     except Exception as e:
         print(f"DynamoDB Error: {e}")
-        return JsonResponse({'history': []})
+        return JsonResponse({'history': []}, status=500)
