@@ -16,7 +16,6 @@ def get_latest_alert(request):
         items = response.get('Items', [])
 
         if items:
-            # Sort newest to oldest and grab the top 25
             items.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
             recent_items = items[:25] 
             
@@ -25,18 +24,24 @@ def get_latest_alert(request):
                 raw_time = item.get('timestamp', '')
                 formatted_time = raw_time[11:19] if len(raw_time) > 18 else raw_time
                 
-                # Grab the status to generate dynamic details
-                venue_status = item.get('venue_status', 'SYSTEM_NORMAL')
+                # Force uppercase to make keyword matching bulletproof
+                venue_status = item.get('venue_status', 'NORMAL').upper()
                 
-                # Dynamically generate the action details
-                if venue_status == "CAUTION: VENTILATION REQUIRED":
-                    action_details = "Threshold exceeded: High CO2 and Occupancy detected. Immediate HVAC adjustment recommended."
+                # --- NEW 3-TIER COLOR LOGIC ---
+                if "SEVERE" in venue_status or "CRITICAL" in venue_status:
+                    badge_color = "danger" # RED
+                    action_details = "CRITICAL: Air quality severely degraded. Maximum HVAC required."
+                elif "CAUTION" in venue_status:
+                    badge_color = "warning text-dark" # YELLOW (with dark text for readability)
+                    action_details = "Threshold exceeded: High CO2 detected. Adjusting ventilation."
                 else:
+                    badge_color = "success" # GREEN
                     action_details = "All environmental metrics are within normal operating parameters."
                 
                 history_list.append({
                     'status': venue_status,
-                    'details': action_details, # Added this back for your frontend!
+                    'details': action_details,
+                    'color': badge_color, 
                     'time': formatted_time,
                     'occupancy': int(item.get('occupancy', 0)),
                     'co2': int(item.get('co2', 0)),
@@ -51,7 +56,7 @@ def get_latest_alert(request):
     except Exception as e:
         print(f"DynamoDB Error: {e}")
         return JsonResponse({'history': []}, status=500)
-                    
+                        
     except Exception as e:
         print(f"DynamoDB Error: {e}")
         return JsonResponse({'history': []}, status=500)
