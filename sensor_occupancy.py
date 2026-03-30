@@ -7,10 +7,10 @@ FOG_NODE_URL = "http://localhost:5000/ingest"
 def run_sensor():
     print("Starting Occupancy Sensor...")
     # Base occupancy
-    occupancy = 160 
+    occupancy = 50 
     while True:
         # Simulate people walking in and out of the bowling venue
-        occupancy += random.randint(-5, 8)
+        occupancy += random.randint(-5, 10)
         occupancy = max(0, min(occupancy, 300)) # Keep between 0 and 300
         
         payload = {"sensor_id": "Occ_Entrance", "type": "occupancy", "value": occupancy}
