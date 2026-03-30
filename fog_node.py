@@ -55,11 +55,11 @@ def process_and_publish():
         time.sleep(10) 
         
         status = "NORMAL"
-        if venue_state["co2"] > 1000 and venue_state["occupancy"] > 150:
-            status = "CAUTION: VENTILATION REQUIRED"
+        if venue_state["co2"] > 1100 and venue_state["occupancy"] > 200:
+            status = "CRITICAL: VENTILATION REQUIRED ASAP"
 
-        elif  venue_state["co2"] > 1100 and venue_state["occupancy"] > 200:
-            status = "CRITICAL: VENTILATION REQUIRED ASAP"   
+        elif  venue_state["co2"] > 1000 and venue_state["occupancy"] > 150:
+            status = "CAUTION: VENTILATION REQUIRED"   
         payload = {
             "timestamp": datetime.datetime.now().isoformat(),
             "venue_status": status,
